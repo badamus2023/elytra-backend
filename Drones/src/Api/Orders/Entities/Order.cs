@@ -12,7 +12,8 @@ namespace Drones.src.Api.Orders.Entities
         Dispatched,
         InFlight,
         Delivered,
-        Cancelled
+        Cancelled,
+        Completed
     }
 
     public class Order

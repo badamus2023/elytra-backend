@@ -56,5 +56,13 @@ namespace Drones.src.Api.Dispatches.Controllers
             await _dispatchService.SimulateFlightAsync(dispatchId);
             return Ok(new { message = "Simulation started." });
         }
+
+        [HttpGet("drone/{droneId}/history")]
+        [Authorize(Roles = "Admin")]
+        public async Task<ActionResult<List<DroneFlightHistoryResponse>>> GetDroneHistory(
+            Guid droneId, [FromQuery] DateTime? from, [FromQuery] DateTime? to)
+        {
+            return Ok(await _dispatchService.GetDroneHistoryAsync(droneId, from, to));
+        }
     }
 }

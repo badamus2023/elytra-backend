@@ -4,6 +4,7 @@ using Drones.src.Api.Common;
 using Drones.src.Api.Common.BackgroundServices;
 using Drones.src.Api.Common.Hubs;
 using Drones.src.Api.Common.Middleware;
+using Drones.src.Api.Common.Services;
 using Drones.src.Api.Data;
 using Drones.src.Api.DeliveryPoints.Services;
 using Drones.src.Api.Dispatches.Services;
@@ -123,6 +124,9 @@ builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<IMaintenanceLogService, MaintenanceLogService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IDeliveryPointService, DeliveryPointService>();
+builder.Services.AddScoped<IRealtimeNotificationService, RealtimeNotificationService>();
+builder.Services.AddScoped<IRestaurantApplicationService, RestaurantApplicationService>();
+builder.Services.AddScoped<IRestaurantOwnershipService, RestaurantOwnershipService>();
 
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     ConnectionMultiplexer.Connect(builder.Configuration["Redis:ConnectionString"]
@@ -155,6 +159,20 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(secret)),
         ClockSkew = TimeSpan.Zero
+    };
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            if (!string.IsNullOrWhiteSpace(accessToken) &&
+                context.HttpContext.Request.Path.StartsWithSegments("/hubs"))
+            {
+                context.Token = accessToken;
+            }
+
+            return Task.CompletedTask;
+        }
     };
 });
 
@@ -194,6 +212,7 @@ app.UseAuthentication();
 app.UseAuthorization(); 
 app.MapControllers();
 app.MapHub<DroneHub>("/hubs/drone");
+app.MapHub<NotificationHub>("/hubs/notifications");
 
 // Auto-migrate on startup
 using (var scope = app.Services.CreateScope())

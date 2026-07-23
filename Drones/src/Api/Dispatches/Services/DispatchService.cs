@@ -4,6 +4,8 @@ using Drones.src.Api.Dispatches.DTOs.Responses;
 using Drones.src.Api.Dispatches.Entities;
 using Drones.src.Api.Drones.Entities;
 using Drones.src.Api.Orders.Entities;
+using Drones.src.Api.Common.DTOs;
+using Drones.src.Api.Common.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Drones.src.Api.Dispatches.Services
@@ -12,11 +14,16 @@ namespace Drones.src.Api.Dispatches.Services
     {
         private readonly AppDbContext _context;
         private readonly IServiceScopeFactory _scopeFactory;
+        private readonly IRealtimeNotificationService _notifications;
 
-        public DispatchService(AppDbContext context, IServiceScopeFactory scopeFactory)
+        public DispatchService(
+            AppDbContext context,
+            IServiceScopeFactory scopeFactory,
+            IRealtimeNotificationService notifications)
         {
             _context = context;
             _scopeFactory = scopeFactory;
+            _notifications = notifications;
         }
 
         public async Task<DispatchResponse> CreateDispatchAsync(CreateDispatchRequest request)
@@ -72,6 +79,9 @@ namespace Drones.src.Api.Dispatches.Services
             await _context.Dispatches.AddAsync(dispatch);
             await _context.SaveChangesAsync();
 
+            await NotifyCustomerAsync(order, "Your order was dispatched",
+                "A drone has been assigned to your order.");
+
             return MapToResponse(dispatch, dispatch.Drone);
         }
 
@@ -116,6 +126,8 @@ namespace Drones.src.Api.Dispatches.Services
             dispatch.Order.Status = OrderStatus.InFlight;
             dispatch.Order.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
+            await NotifyCustomerAsync(dispatch.Order, "Your order is in flight",
+                "Your drone delivery is on the way.");
 
             _ = Task.Run(async () =>
             {
@@ -136,6 +148,15 @@ namespace Drones.src.Api.Dispatches.Services
                     drone.CurrentLatitude = startLat + (endLat - startLat) * i / steps;
                     drone.CurrentLongitude = startLon + (endLon - startLon) * i / steps;
                     drone.LastSeenAt = DateTime.UtcNow;
+                    db.DroneRoutePoints.Add(new DroneRoutePoint
+                    {
+                        DispatchId = dispatchId,
+                        DroneId = droneId,
+                        Latitude = drone.CurrentLatitude,
+                        Longitude = drone.CurrentLongitude,
+                        BatteryLevel = drone.BatteryLevel,
+                        RecordedAt = DateTime.UtcNow
+                    });
 
                     await db.SaveChangesAsync();
                 }
@@ -159,6 +180,15 @@ namespace Drones.src.Api.Dispatches.Services
                 finalDispatch.Order.UpdatedAt = DateTime.UtcNow;
 
                 await finalDb.SaveChangesAsync();
+
+                var notifications = finalScope.ServiceProvider
+                    .GetRequiredService<IRealtimeNotificationService>();
+                await notifications.NotifyUserAsync(finalDispatch.Order.UserId,
+                    BuildOrderNotification(
+                        finalDispatch.Order,
+                        "Delivery arrived",
+                        "Please confirm that you received your order.",
+                        "confirmReceipt"));
             });
         }
 
@@ -199,7 +229,64 @@ namespace Drones.src.Api.Dispatches.Services
 
             await _context.SaveChangesAsync();
 
+            var title = newStatus switch
+            {
+                DispatchStatus.InFlight => "Your order is in flight",
+                DispatchStatus.Delivered => "Delivery arrived",
+                DispatchStatus.Failed => "Delivery cancelled",
+                _ => "Delivery updated"
+            };
+            var message = newStatus switch
+            {
+                DispatchStatus.InFlight => "Your drone delivery is on the way.",
+                DispatchStatus.Delivered => "Please confirm that you received your order.",
+                DispatchStatus.Failed => "The dispatch failed and your order was cancelled.",
+                _ => $"Dispatch status changed to {newStatus}."
+            };
+            await NotifyCustomerAsync(
+                dispatch.Order,
+                title,
+                message,
+                newStatus == DispatchStatus.Delivered ? "confirmReceipt" : "toast");
+
             return MapToResponse(dispatch, dispatch.Drone);
+        }
+
+        public async Task<List<DroneFlightHistoryResponse>> GetDroneHistoryAsync(
+            Guid droneId, DateTime? from, DateTime? to)
+        {
+            if (from.HasValue && to.HasValue && from > to)
+                throw new InvalidOperationException("Start date cannot be after end date.");
+            if (!await _context.Drones.AnyAsync(x => x.Id == droneId))
+                throw new InvalidOperationException("DRONE_NOT_FOUND");
+
+            var query = _context.Dispatches.AsNoTracking()
+                .Include(x => x.Order)
+                .Include(x => x.RoutePoints)
+                .Where(x => x.DroneId == droneId);
+            if (from.HasValue) query = query.Where(x => x.CreatedAt >= from.Value);
+            if (to.HasValue) query = query.Where(x => x.CreatedAt <= to.Value);
+
+            return await query.OrderByDescending(x => x.CreatedAt)
+                .Select(x => new DroneFlightHistoryResponse
+                {
+                    DispatchId = x.Id,
+                    OrderId = x.OrderId,
+                    DroneId = x.DroneId,
+                    Status = x.Status.ToString(),
+                    DeliveryAddress = x.Order.DeliveryAddress,
+                    CreatedAt = x.CreatedAt,
+                    EstimatedDeliveryAt = x.EstimatedDeliveryAt,
+                    DeliveredAt = x.DeliveredAt,
+                    RoutePoints = x.RoutePoints.OrderBy(p => p.RecordedAt)
+                        .Select(p => new DroneRoutePointResponse
+                        {
+                            Latitude = p.Latitude,
+                            Longitude = p.Longitude,
+                            BatteryLevel = p.BatteryLevel,
+                            RecordedAt = p.RecordedAt
+                        }).ToList()
+                }).ToListAsync();
         }
 
         //helpers
@@ -219,6 +306,30 @@ namespace Drones.src.Api.Dispatches.Services
         }
 
         private static double ToRad(double deg) => deg * Math.PI / 180;
+
+        private Task NotifyCustomerAsync(
+            Order order,
+            string title,
+            string message,
+            string presentation = "toast") =>
+            _notifications.NotifyUserAsync(
+                order.UserId,
+                BuildOrderNotification(order, title, message, presentation));
+
+        private static NotificationMessage BuildOrderNotification(
+            Order order,
+            string title,
+            string message,
+            string presentation) => new()
+        {
+            Category = "dispatch",
+            Severity = presentation == "confirmReceipt" ? "success" : "info",
+            Presentation = presentation,
+            Title = title,
+            Message = message,
+            OrderId = order.Id,
+            Status = order.Status.ToString()
+        };
 
         private static DispatchResponse MapToResponse(Dispatch dispatch, Drone drone) => new()
         {

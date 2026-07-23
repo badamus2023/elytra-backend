@@ -2,6 +2,8 @@
 using Drones.src.Api.Orders.DTOs.Requests;
 using Drones.src.Api.Orders.DTOs.Responses;
 using Drones.src.Api.Orders.Entities;
+using Drones.src.Api.Common.DTOs;
+using Drones.src.Api.Common.Services;
 using Microsoft.EntityFrameworkCore;
 using static Drones.src.Api.Orders.DTOs.Responses.OrderResponse;
 
@@ -11,10 +13,12 @@ namespace Drones.src.Api.Orders.Services
     {
 
         private readonly AppDbContext _context;
+        private readonly IRealtimeNotificationService _notifications;
 
-        public OrderService(AppDbContext context)
+        public OrderService(AppDbContext context, IRealtimeNotificationService notifications)
         {
             _context = context;
+            _notifications = notifications;
         }
 
         public async Task CancelOrderAsync(Guid orderId, Guid userId)
@@ -123,6 +127,46 @@ namespace Drones.src.Api.Orders.Services
             await _context.Orders.AddAsync(order);
             await _context.SaveChangesAsync();
 
+            await _notifications.NotifyRoleAsync("Admin", new NotificationMessage
+            {
+                Category = "order",
+                Severity = "info",
+                Title = "New order received",
+                Message = $"Order {order.Id.ToString()[..8]} was placed.",
+                OrderId = order.Id,
+                Status = order.Status.ToString()
+            });
+
+            return MapToResponse(order);
+        }
+
+        public async Task<OrderResponse> ConfirmReceiptAsync(Guid orderId, Guid userId)
+        {
+            var order = await _context.Orders
+                .Include(o => o.Items)
+                .FirstOrDefaultAsync(o => o.Id == orderId && o.UserId == userId)
+                ?? throw new InvalidOperationException("ORDER_NOT_FOUND");
+
+            if (order.Status == OrderStatus.Completed)
+                return MapToResponse(order);
+
+            if (order.Status != OrderStatus.Delivered)
+                throw new InvalidOperationException("Only delivered orders can be confirmed.");
+
+            order.Status = OrderStatus.Completed;
+            order.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            await _notifications.NotifyRoleAsync("Admin", new NotificationMessage
+            {
+                Category = "order",
+                Severity = "success",
+                Title = "Order completed",
+                Message = $"Customer confirmed receipt of order {order.Id.ToString()[..8]}.",
+                OrderId = order.Id,
+                Status = order.Status.ToString()
+            });
+
             return MapToResponse(order);
         }
 
@@ -158,6 +202,15 @@ namespace Drones.src.Api.Orders.Services
                 .OrderByDescending(o => o.CreatedAt)
                 .ToListAsync();
 
+            return orders.Select(MapToResponse).ToList();
+        }
+
+        public async Task<List<OrderResponse>> GetRestaurantOwnerOrdersAsync(Guid userId)
+        {
+            var orders = await _context.Orders.Include(o => o.Items)
+                .Where(o => o.Restaurant.OwnerUserId == userId)
+                .OrderByDescending(o => o.CreatedAt)
+                .ToListAsync();
             return orders.Select(MapToResponse).ToList();
         }
 

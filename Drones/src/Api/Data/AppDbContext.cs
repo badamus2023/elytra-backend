@@ -32,6 +32,7 @@ namespace Drones.src.Api.Data
         //Restaurants
         public DbSet<Review> Reviews => Set<Review>();
         public DbSet<Restaurant> Restaurants => Set<Restaurant>();
+        public DbSet<RestaurantApplication> RestaurantApplications => Set<RestaurantApplication>();
 
         //Products
         public DbSet<Product> Products => Set<Product>();
@@ -40,6 +41,7 @@ namespace Drones.src.Api.Data
         //Drones
         public DbSet<Drone> Drones => Set<Drone>();
         public DbSet<DroneMaintenanceLog> DroneMaintenanceLogs => Set<DroneMaintenanceLog>();
+        public DbSet<DroneRoutePoint> DroneRoutePoints => Set<DroneRoutePoint>();
 
         //Dispatch
         public DbSet<Dispatch> Dispatches => Set<Dispatch>();
@@ -58,7 +60,8 @@ namespace Drones.src.Api.Data
         {
             modelBuilder.Entity<Role>().HasData(
                 new Role { Id = 1, Name = "Admin", Description = "Full access to all resources." },
-                new Role { Id = 2, Name = "User", Description = "Limited access to own resources." }
+                new Role { Id = 2, Name = "User", Description = "Limited access to own resources." },
+                new Role { Id = 3, Name = "RestaurantOwner", Description = "Manages an approved restaurant." }
             );
 
             var adminId = Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890");

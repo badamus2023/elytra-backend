@@ -1,5 +1,7 @@
 ﻿using Drones.src.Api.Common.Hubs;
 using Drones.src.Api.Data;
+using Drones.src.Api.Dispatches.Entities;
+using Drones.src.Api.Drones.Entities;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
@@ -91,14 +93,39 @@ namespace Drones.src.Api.Common.BackgroundServices
                  var droneEntity = await db.Drones
                      .FirstOrDefaultAsync(d => d.Id == droneId);
 
-                 if (droneEntity != null)
+                if (droneEntity != null)
                  {
                      _logger.LogDebug("Updating drone in DB: {DroneId}", droneId);
 
                      droneEntity.CurrentLatitude = telemetry.latitude;
                      droneEntity.CurrentLongitude = telemetry.longitude;
                      droneEntity.BatteryLevel = telemetry.battery_percent;
-                     droneEntity.LastSeenAt = DateTime.UtcNow;
+                    droneEntity.LastSeenAt = DateTime.UtcNow;
+
+                    var activeDispatch = await db.Dispatches
+                        .FirstOrDefaultAsync(d => d.DroneId == droneId &&
+                            d.Status == DispatchStatus.InFlight);
+                    if (activeDispatch != null)
+                    {
+                        var now = DateTime.UtcNow;
+                        var lastPointAt = await db.DroneRoutePoints
+                            .Where(p => p.DispatchId == activeDispatch.Id)
+                            .OrderByDescending(p => p.RecordedAt)
+                            .Select(p => (DateTime?)p.RecordedAt)
+                            .FirstOrDefaultAsync();
+                        if (!lastPointAt.HasValue || now - lastPointAt.Value >= TimeSpan.FromSeconds(5))
+                        {
+                            db.DroneRoutePoints.Add(new DroneRoutePoint
+                            {
+                                DispatchId = activeDispatch.Id,
+                                DroneId = droneId,
+                                Latitude = telemetry.latitude,
+                                Longitude = telemetry.longitude,
+                                BatteryLevel = telemetry.battery_percent,
+                                RecordedAt = now
+                            });
+                        }
+                    }
 
                      await db.SaveChangesAsync();
                      _logger.LogDebug("DB updated successfully for drone: {DroneId}", droneId);

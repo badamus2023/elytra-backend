@@ -29,5 +29,6 @@ namespace Drones.src.Api.Dispatches.Entities
 
         public Order Order { get; set; } = default!;
         public Drone Drone { get; set; } = default!;
+        public ICollection<DroneRoutePoint> RoutePoints { get; set; } = new List<DroneRoutePoint>();
     }
 }

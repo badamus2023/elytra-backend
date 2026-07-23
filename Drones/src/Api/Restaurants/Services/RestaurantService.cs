@@ -71,6 +71,23 @@ namespace Drones.src.Api.Restaurants.Services
             return MapToResponse(restaurant, avgRating, restaurant.Reviews.Count());
         }
 
+        public async Task<RestaurantResponse> GetMineAsync(Guid userId)
+        {
+            var restaurant = await _context.Restaurants.Include(r => r.Reviews)
+                .FirstOrDefaultAsync(r => r.OwnerUserId == userId)
+                ?? throw new InvalidOperationException("RESTAURANT_NOT_FOUND");
+            var avg = restaurant.Reviews.Any() ? restaurant.Reviews.Average(x => x.Rating) : 0;
+            return MapToResponse(restaurant, avg, restaurant.Reviews.Count);
+        }
+
+        public async Task<RestaurantResponse> UpdateOwnedAsync(
+            Guid id, Guid userId, UpdateRestaurantRequest request)
+        {
+            if (!await _context.Restaurants.AnyAsync(r => r.Id == id && r.OwnerUserId == userId))
+                throw new InvalidOperationException("RESTAURANT_NOT_FOUND");
+            return await UpdateAsync(id, request);
+        }
+
         public async Task<RestaurantResponse> UpdateAsync(Guid id, UpdateRestaurantRequest request)
         {
             var restaurant = await _context.Restaurants

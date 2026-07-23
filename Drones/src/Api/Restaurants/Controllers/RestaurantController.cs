@@ -4,6 +4,7 @@ using Drones.src.Api.Restaurants.DTOs.Responses;
 using Drones.src.Api.Restaurants.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Drones.src.Api.Restaurants.Controllers
 {
@@ -40,13 +41,24 @@ namespace Drones.src.Api.Restaurants.Controllers
             return Ok(result);
         }
 
+        [HttpGet("mine")]
+        [Authorize(Roles = "RestaurantOwner")]
+        public Task<RestaurantResponse> GetMine() =>
+            _restaurantService.GetMineAsync(GetUserId());
+
         [HttpPatch("{id}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,RestaurantOwner")]
         public async Task<ActionResult<RestaurantResponse>> Update(Guid id, UpdateRestaurantRequest request)
         {
-            var result = await _restaurantService.UpdateAsync(id, request);
+            var result = User.IsInRole("Admin")
+                ? await _restaurantService.UpdateAsync(id, request)
+                : await _restaurantService.UpdateOwnedAsync(id, GetUserId(), request);
             return Ok(result);
         }
+
+        private Guid GetUserId() => Guid.Parse(
+            User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? throw new UnauthorizedAccessException());
 
         [HttpDelete("{id}")]
         [Authorize(Roles = "Admin")]

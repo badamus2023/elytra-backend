@@ -8,7 +8,9 @@ namespace Drones.src.Api.Restaurants.Services
         Task<RestaurantResponse> CreateAsync(CreateRestaurantRequest request);
         Task<RestaurantResponse> GetAsync(Guid id);
         Task<List<RestaurantResponse>> GetAllAsync();
+        Task<RestaurantResponse> GetMineAsync(Guid userId);
         Task<RestaurantResponse> UpdateAsync(Guid id, UpdateRestaurantRequest request);
+        Task<RestaurantResponse> UpdateOwnedAsync(Guid id, Guid userId, UpdateRestaurantRequest request);
         Task DeleteAsync(Guid id);
     }
 }

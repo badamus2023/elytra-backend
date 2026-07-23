@@ -10,5 +10,7 @@ namespace Drones.src.Api.Dispatches.Services
         Task<DispatchResponse> GetDispatchByOrderAsync(Guid orderId);
         Task<DispatchResponse> UpdateDispatchStatusAsync(Guid dispatchId, string status);
         Task SimulateFlightAsync(Guid dispatchId);
+        Task<List<DroneFlightHistoryResponse>> GetDroneHistoryAsync(
+            Guid droneId, DateTime? from, DateTime? to);
     }
 }

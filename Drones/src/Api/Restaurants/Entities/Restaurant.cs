@@ -1,11 +1,13 @@
 ﻿using Drones.src.Api.Orders.Entities;
 using Drones.src.Api.Products.Entities;
+using Drones.src.Api.Auth.Entities;
 
 namespace Drones.src.Api.Restaurants.Entities
 {
     public class Restaurant
     {
         public Guid Id { get; set; }
+        public Guid? OwnerUserId { get; set; }
         public string Name { get; set; } = string.Empty;
         public string Address { get; set; } = string.Empty;
         public double Latitude { get; set; }
@@ -21,5 +23,6 @@ namespace Drones.src.Api.Restaurants.Entities
         public ICollection<Category> Categories { get; set; } = new List<Category>();
         public ICollection<Order> Orders { get; set; } = new List<Order>();
         public ICollection<Review> Reviews { get; set; } = new List<Review>();
+        public User? OwnerUser { get; set; }
     }
 }

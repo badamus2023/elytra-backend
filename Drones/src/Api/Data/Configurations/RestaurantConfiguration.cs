@@ -24,6 +24,11 @@ namespace Drones.src.Api.Data.Configurations
             builder.Property(r => r.ImageUrl)
                 .HasMaxLength(512);
 
+            builder.HasOne(r => r.OwnerUser)
+                .WithMany(u => u.OwnedRestaurants)
+                .HasForeignKey(r => r.OwnerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             builder.HasMany(r => r.Categories)
                 .WithOne(c => c.Restaurant)
                 .HasForeignKey(c => c.RestaurantId)

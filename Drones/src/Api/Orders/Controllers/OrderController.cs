@@ -44,7 +44,9 @@ namespace Drones.src.Api.Orders.Controllers
             var userId = GetUserId();
             var result = User.IsInRole("Admin")
                 ? await _orderService.GetAllOrdersAsync()
-                : await _orderService.GetUserOrdersAsync(userId);
+                : User.IsInRole("RestaurantOwner")
+                    ? await _orderService.GetRestaurantOwnerOrdersAsync(userId)
+                    : await _orderService.GetUserOrdersAsync(userId);
             return Ok(result);
         }
 
@@ -54,6 +56,13 @@ namespace Drones.src.Api.Orders.Controllers
             var userId = GetUserId();
             await _orderService.CancelOrderAsync(orderId, userId);
             return Ok(new { message = "Order cancelled" });
+        }
+
+        [HttpPost("{orderId}/confirm-receipt")]
+        public async Task<ActionResult<OrderResponse>> ConfirmReceipt(Guid orderId)
+        {
+            var result = await _orderService.ConfirmReceiptAsync(orderId, GetUserId());
+            return Ok(result);
         }
 
         //helpers

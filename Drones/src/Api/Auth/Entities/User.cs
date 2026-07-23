@@ -18,5 +18,7 @@ namespace Drones.src.Api.Auth.Entities
         public UserVerficationToken? VerificationToken { get; set; }
         public ICollection<PasswordResetToken> PasswordResetTokens { get; set; }
         public ICollection<Review> Reviews { get; set; } = new List<Review>();
+        public ICollection<Restaurant> OwnedRestaurants { get; set; } = new List<Restaurant>();
+        public ICollection<RestaurantApplication> RestaurantApplications { get; set; } = new List<RestaurantApplication>();
     }
 }

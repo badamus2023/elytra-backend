@@ -24,6 +24,13 @@ namespace Drones.src.Api.Auth.Controllers
             return Ok(result);
         }
 
+        [HttpPost("register-restaurant-owner")]
+        public async Task<ActionResult<AuthResponse>> RegisterRestaurantOwner(
+            RegisterRestaurantOwnerRequest request)
+        {
+            return Ok(await _authService.RegisterRestaurantOwnerAsync(request));
+        }
+
         [HttpPost("login")]
         public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
         {

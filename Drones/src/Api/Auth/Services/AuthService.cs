@@ -5,6 +5,7 @@ using BCrypt.Net;
 using System.Net.WebSockets;
 using Drones.src.Api.Auth.Entities;
 using Drones.src.Api.Data;
+using Drones.src.Api.Restaurants.Entities;
 
 namespace Drones.src.Api.Auth.Services
 {
@@ -69,6 +70,68 @@ namespace Drones.src.Api.Auth.Services
             var refreshToken = await CreateRefreshTokenAsync(user.Id);
 
             return BuildAuthResponse(user, accessToken, refreshToken.Token, roles);
+        }
+
+        public async Task<AuthResponse> RegisterRestaurantOwnerAsync(
+            RegisterRestaurantOwnerRequest request)
+        {
+            if (await _context.Users.AnyAsync(u => u.Email == request.Email))
+                throw new InvalidOperationException("EMAIL_TAKEN");
+            if (await _context.RestaurantApplications.AnyAsync(x => x.TaxId == request.TaxId))
+                throw new InvalidOperationException("TAX_ID_TAKEN");
+
+            var role = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "RestaurantOwner")
+                ?? throw new InvalidOperationException("DEFAULT_ROLE_NOT_FOUND");
+            var user = new User
+            {
+                Id = Guid.NewGuid(),
+                Email = request.Email.Trim(),
+                PhoneNumber = request.ContactPhone.Trim(),
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+                IsEmailVerified = false,
+                IsActive = false,
+                CreatedAt = DateTime.UtcNow,
+                UserRoles =
+                [
+                    new UserRole { RoleId = role.Id, AssignedAt = DateTime.UtcNow }
+                ]
+            };
+            var verification = new UserVerficationToken
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                Token = Guid.NewGuid().ToString("N"),
+                ExpiresAt = DateTime.UtcNow.AddHours(24)
+            };
+            var application = new RestaurantApplication
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                CompanyName = request.CompanyName.Trim(),
+                TaxId = request.TaxId.Trim(),
+                ContactPhone = request.ContactPhone.Trim(),
+                RestaurantName = request.RestaurantName.Trim(),
+                Address = request.Address.Trim(),
+                Latitude = request.Latitude,
+                Longitude = request.Longitude,
+                Description = request.Description?.Trim(),
+                OpenTime = request.OpenTime,
+                CloseTime = request.CloseTime,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.Users.Add(user);
+            _context.UserVerficationTokens.Add(verification);
+            _context.RestaurantApplications.Add(application);
+            await _context.SaveChangesAsync();
+            await _emailService.SendVerificationEmailAsync(user.Email, verification.Token);
+
+            var roles = new List<string> { role.Name };
+            return BuildAuthResponse(
+                user,
+                _tokenService.GenerateAccessToken(user, roles),
+                (await CreateRefreshTokenAsync(user.Id)).Token,
+                roles);
         }
 
         public async Task<AuthResponse> LoginAsync(LoginRequest request)

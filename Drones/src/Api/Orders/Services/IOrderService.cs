@@ -10,6 +10,8 @@ namespace Drones.src.Api.Orders.Services
         Task<OrderResponse> GetOrderByIdAsync(Guid orderId);
         Task<List<OrderResponse>> GetUserOrdersAsync(Guid userId);
         Task<List<OrderResponse>> GetAllOrdersAsync();
+        Task<List<OrderResponse>> GetRestaurantOwnerOrdersAsync(Guid userId);
         Task CancelOrderAsync(Guid orderId, Guid userId);
+        Task<OrderResponse> ConfirmReceiptAsync(Guid orderId, Guid userId);
     }
 }

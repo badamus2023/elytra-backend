@@ -1,5 +1,7 @@
 using Drones.src.Api.Data;
 using Drones.src.Api.Orders.Entities;
+using Drones.src.Api.Common.DTOs;
+using Drones.src.Api.Common.Services;
 using Drones.src.Api.Payments.DTOs.Responses;
 using Drones.src.Api.Payments.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -13,15 +15,18 @@ namespace Drones.src.Api.Payments.Services
         private readonly AppDbContext _context;
         private readonly StripeClient _stripeClient;
         private readonly IConfiguration _configuration;
+        private readonly IRealtimeNotificationService _notifications;
 
         public PaymentService(
             AppDbContext context,
             StripeClient stripeClient,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IRealtimeNotificationService notifications)
         {
             _context = context;
             _stripeClient = stripeClient;
             _configuration = configuration;
+            _notifications = notifications;
         }
 
         public async Task<CheckoutSessionResponse> CreateCheckoutSessionAsync(Guid orderId, Guid userId)
@@ -180,6 +185,16 @@ namespace Drones.src.Api.Payments.Services
             payment.Order.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+
+            await _notifications.NotifyRoleAsync("Admin", new NotificationMessage
+            {
+                Category = "payment",
+                Severity = "success",
+                Title = "Order paid",
+                Message = $"Payment completed for order {payment.OrderId.ToString()[..8]}.",
+                OrderId = payment.OrderId,
+                Status = payment.Order.Status.ToString()
+            });
         }
 
         private async Task<PaymentStatusResponse> BuildPaymentStatusAsync(string sessionId, Guid userId)
